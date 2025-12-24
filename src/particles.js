@@ -11,6 +11,10 @@ export class SmokeParticleSystem {
         this.coffeeSteamRate = 30; // coffee steam particles per second
         this.exhaleParticleCount = 30;
 
+        // Track which cup to render steam for (null = no steam)
+        this.activeCup = null;
+        this.steamEnabled = true;
+
         // Particle arrays
         this.particles = [];
         this.idleTimer = 0;
@@ -119,6 +123,7 @@ export class SmokeParticleSystem {
 
     spawnCoffeeSteam() {
         if (this.particles.length >= this.maxParticles) return;
+        if (!this.steamEnabled) return;
 
         const cupPos = this.hands.getCoffeeCupWorldPosition();
         if (!cupPos) return;
@@ -295,5 +300,20 @@ export class SmokeParticleSystem {
         this.scene.remove(this.points);
         this.geometry.dispose();
         this.material.dispose();
+    }
+
+    /**
+     * Enable or disable coffee steam rendering
+     */
+    setSteamEnabled(enabled) {
+        this.steamEnabled = enabled;
+    }
+
+    /**
+     * Set the active cup for steam rendering
+     * Call this when spawning a new cup
+     */
+    setActiveCup(cup) {
+        this.activeCup = cup;
     }
 }

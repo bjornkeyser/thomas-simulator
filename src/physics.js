@@ -73,11 +73,18 @@ export class PhysicsWorld {
                 if (body === bodyA || body === bodyB) {
                     const otherBody = body === bodyA ? bodyB : bodyA;
 
-                    // Only break on ground collision (static body at y ~ 0)
-                    if (otherBody.mass === 0 && otherBody.position.y < 0.1) {
-                        // Calculate impact force from velocity
-                        const impactSpeed = body.velocity.length();
-                        console.log('Ground collision! Speed:', impactSpeed.toFixed(2), 'threshold:', config.threshold);
+                    // Calculate relative impact velocity
+                    const relativeVelocity = new CANNON.Vec3();
+                    body.velocity.vsub(otherBody.velocity, relativeVelocity);
+                    const impactSpeed = relativeVelocity.length();
+
+                    // Break on any solid collision (ground, table, or fragments) with enough force
+                    const isGroundOrTable = otherBody.mass === 0;
+                    const isFragment = otherBody.mass > 0 && otherBody.mass < 0.1; // Fragments have mass 0.05
+
+                    if (isGroundOrTable || isFragment) {
+                        console.log('Collision! Speed:', impactSpeed.toFixed(2), 'threshold:', config.threshold,
+                            isFragment ? '(fragment)' : '(static)');
 
                         if (impactSpeed > config.threshold) {
                             const impactPoint = new THREE.Vector3(

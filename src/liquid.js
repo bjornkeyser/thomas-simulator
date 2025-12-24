@@ -39,7 +39,7 @@ export class LiquidSimulation {
 
         // Spill tracking
         this.droplets = [];
-        this.maxDroplets = 100;
+        this.maxDroplets = 200;      // More droplets for big spills
         this.spillThreshold = 0.2;   // How much over rim before spill
         this.totalSpilled = 0;
 
@@ -271,7 +271,7 @@ export class LiquidSimulation {
 
         // Stain system
         this.stains = [];
-        this.maxStains = 50;
+        this.maxStains = 300;        // Allow many stains for big spills
         this.stainGeometry = new THREE.CircleGeometry(0.008, 8);
         this.stainMaterial = new THREE.MeshBasicMaterial({
             color: 0x5c4a1f, // Coffee stain color
@@ -282,7 +282,7 @@ export class LiquidSimulation {
         this.stainMaterial.polygonOffset = true;
         this.stainMaterial.polygonOffsetFactor = -1;
 
-        this.dropletInstancedMesh = new THREE.InstancedMesh(geometry, material, 100);
+        this.dropletInstancedMesh = new THREE.InstancedMesh(geometry, material, 200);
         this.dropletInstancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.dropletInstancedMesh.count = 0;
         this.dropletInstancedMesh.frustumCulled = false;
@@ -290,7 +290,7 @@ export class LiquidSimulation {
 
         // Initialize all instance matrices
         const dummy = new THREE.Object3D();
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 200; i++) {
             dummy.position.set(0, -100, 0);
             dummy.updateMatrix();
             this.dropletInstancedMesh.setMatrixAt(i, dummy.matrix);
@@ -760,36 +760,19 @@ export class LiquidSimulation {
             oldest.mesh.material.dispose();
         }
 
-        // Create stain mesh with its own material for independent opacity
+        // Create stain mesh with its own material
         const stainMat = this.stainMaterial.clone();
+        stainMat.opacity = 0.7; // Stains are permanent, full opacity
         const stain = new THREE.Mesh(this.stainGeometry, stainMat);
         stain.position.set(x, y, z);
         stain.rotation.x = -Math.PI / 2; // Flat on table
         stain.scale.setScalar(0.8 + Math.random() * 0.4); // Random size variation
         this.scene.add(stain);
-        this.stains.push({
-            mesh: stain,
-            lifetime: 15.0, // Fade over 15 seconds
-            maxLifetime: 15.0
-        });
+        this.stains.push({ mesh: stain });
     }
 
     updateStains(deltaTime) {
-        for (let i = this.stains.length - 1; i >= 0; i--) {
-            const s = this.stains[i];
-            s.lifetime -= deltaTime;
-
-            // Fade opacity based on remaining lifetime
-            const fadeRatio = Math.max(0, s.lifetime / s.maxLifetime);
-            s.mesh.material.opacity = fadeRatio * 0.6;
-
-            // Remove when fully faded
-            if (s.lifetime <= 0) {
-                this.scene.remove(s.mesh);
-                s.mesh.material.dispose();
-                this.stains.splice(i, 1);
-            }
-        }
+        // Stains are now permanent - no fading needed
     }
 
     updateLiquidMesh(cupWorldPos, cupTilt) {
@@ -837,8 +820,8 @@ export class LiquidSimulation {
         const cupWorldPos = new THREE.Vector3();
         this.cup.getWorldPosition(cupWorldPos);
 
-        // Number of droplets based on how much liquid was left
-        const dropletCount = Math.floor(this.liquidLevel / this.maxLiquidLevel * 30);
+        // Number of droplets based on how much liquid was left (much more now!)
+        const dropletCount = Math.floor(this.liquidLevel / this.maxLiquidLevel * 120);
 
         // Spawn droplets across the liquid surface
         for (let i = 0; i < dropletCount; i++) {
@@ -867,22 +850,22 @@ export class LiquidSimulation {
                 material: new CANNON.Material({ friction: 0.3, restitution: 0.2 })
             });
 
-            // Outward explosion velocity from impact point
+            // Outward explosion velocity from impact point - more splashy!
             const outwardDir = new THREE.Vector3()
                 .subVectors(spillPos, impactPoint)
                 .normalize();
 
-            const speed = 0.5 + Math.random() * 1.5;
+            const speed = 1.0 + Math.random() * 2.5; // Faster spread
             body.velocity.set(
-                outwardDir.x * speed + (Math.random() - 0.5) * 0.5,
-                Math.random() * 1.0, // Small upward splash
-                outwardDir.z * speed + (Math.random() - 0.5) * 0.5
+                outwardDir.x * speed + (Math.random() - 0.5) * 1.0,
+                Math.random() * 1.5, // More upward splash
+                outwardDir.z * speed + (Math.random() - 0.5) * 1.0
             );
 
             this.physicsWorld.addBody(body);
             this.dropletBodies.push({
                 body: body,
-                lifetime: 3.0,
+                lifetime: 4.0, // Longer lifetime to travel further
                 wasFalling: false,
                 stained: false
             });

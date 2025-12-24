@@ -17,6 +17,9 @@ export class SoundManager {
         // Cup tap sprite definitions - will be auto-detected from audio
         this.cupTapSprites = [];
 
+        // Cough sprite definitions - will be auto-detected from audio
+        this.coughSprites = [];
+
         // Setup audio context resume on first user interaction
         this.setupContextResume();
     }
@@ -55,14 +58,16 @@ export class SoundManager {
     }
 
     /**
-     * Analyze audio buffer to detect volume peaks (transients)
+     * Analyze audio buffer to detect volume peaks (transients) with dynamic durations
      * Returns array of { start, duration } for each detected sound
      */
     detectPeaks(buffer, options = {}) {
         const {
             threshold = 0.15,        // Volume threshold (0-1) to trigger detection
+            endThreshold = 0.05,     // Volume threshold to detect end of sound
             minGap = 0.2,           // Minimum seconds between peaks
-            duration = 0.4,         // Duration of each sprite
+            minDuration = 0.2,      // Minimum duration of each sprite
+            maxDuration = 2.0,      // Maximum duration of each sprite
             windowSize = 1024       // Samples per analysis window
         } = options;
 
@@ -71,6 +76,8 @@ export class SoundManager {
         const sprites = [];
 
         let lastPeakTime = -minGap;
+        let inSound = false;
+        let soundStart = 0;
 
         // Scan through audio in windows
         for (let i = 0; i < channelData.length; i += windowSize) {
@@ -84,14 +91,37 @@ export class SoundManager {
 
             const currentTime = i / sampleRate;
 
-            // Check if this is a peak above threshold with enough gap from last
-            if (rms > threshold && (currentTime - lastPeakTime) >= minGap) {
-                sprites.push({
-                    start: currentTime, // Start right at the transient
-                    duration: duration
-                });
-                lastPeakTime = currentTime;
+            if (!inSound) {
+                // Check if this is a new peak above threshold with enough gap from last
+                if (rms > threshold && (currentTime - lastPeakTime) >= minGap) {
+                    inSound = true;
+                    soundStart = currentTime;
+                }
+            } else {
+                // We're in a sound - check if it ended (volume dropped below end threshold)
+                // or if we've hit max duration
+                const elapsed = currentTime - soundStart;
+                if (rms < endThreshold || elapsed >= maxDuration) {
+                    // Sound ended - calculate dynamic duration
+                    const duration = Math.max(minDuration, elapsed);
+                    sprites.push({
+                        start: soundStart,
+                        duration: duration
+                    });
+                    lastPeakTime = soundStart;
+                    inSound = false;
+                }
             }
+        }
+
+        // Handle case where sound extends to end of buffer
+        if (inSound) {
+            const finalTime = channelData.length / sampleRate;
+            const duration = Math.max(minDuration, finalTime - soundStart);
+            sprites.push({
+                start: soundStart,
+                duration: Math.min(duration, maxDuration)
+            });
         }
 
         console.log(`Detected ${sprites.length} peaks in audio:`, sprites);
@@ -124,16 +154,34 @@ export class SoundManager {
                 this.loadSound('break', 'sounds/735851__geoff-bremner-audio__smashing-breaking-porcelain-mug-2.wav', {
                     volume: 0.8
                 }),
+                this.loadSound('cough', 'sounds/722622__midwestdocumentary__coughs-gentle-processing.wav', {
+                    volume: 0.8
+                }),
             ]);
 
-            // Auto-detect cup tap sprites from audio peaks
+            // Auto-detect cup tap sprites from audio peaks (with dynamic durations)
             const cupTapData = this.sounds['cupTap'];
             if (cupTapData && cupTapData.buffer) {
                 this.cupTapSprites = this.detectPeaks(cupTapData.buffer, {
-                    threshold: 0.1,   // Adjust if too many/few detections
-                    minGap: 0.3,      // Min 300ms between taps
-                    duration: 0.5     // Each tap lasts ~500ms
+                    threshold: 0.1,      // Volume to trigger detection
+                    endThreshold: 0.03,  // Volume to detect end of tap
+                    minGap: 0.3,         // Min 300ms between taps
+                    minDuration: 0.2,    // Each tap at least 200ms
+                    maxDuration: 0.8     // Each tap at most 800ms
                 });
+            }
+
+            // Auto-detect cough sprites from audio peaks (with dynamic durations)
+            const coughData = this.sounds['cough'];
+            if (coughData && coughData.buffer) {
+                this.coughSprites = this.detectPeaks(coughData.buffer, {
+                    threshold: 0.12,     // Higher threshold to catch start of cough
+                    endThreshold: 0.04,  // Higher end threshold to not cut off early
+                    minGap: 1.5,         // Min 1.5s between coughs (they're distinct)
+                    minDuration: 1.0,    // Each cough at least 1 second
+                    maxDuration: 2.5     // Each cough at most 2.5s
+                });
+                console.log(`Detected ${this.coughSprites.length} cough sprites`);
             }
 
             this.isLoaded = true;
@@ -229,6 +277,37 @@ export class SoundManager {
         const sound = new THREE.Audio(this.listener);
         sound.setBuffer(soundData.buffer);
         sound.setVolume(soundData.options.volume || 0.5);
+
+        // Set the playback range
+        sound.offset = sprite.start;
+        sound.duration = sprite.duration;
+
+        sound.play();
+    }
+
+    // Play a random cough from the cough audio file
+    playCough() {
+        const soundData = this.sounds['cough'];
+        if (!soundData) return;
+
+        // Fallback if no sprites detected
+        if (this.coughSprites.length === 0) {
+            console.warn('No cough sprites detected, playing from start');
+            const sound = new THREE.Audio(this.listener);
+            sound.setBuffer(soundData.buffer);
+            sound.setVolume(soundData.options.volume || 0.8);
+            sound.duration = 0.8;
+            sound.play();
+            return;
+        }
+
+        // Pick a random sprite
+        const sprite = this.coughSprites[Math.floor(Math.random() * this.coughSprites.length)];
+
+        // Create a new Audio instance for overlapping plays
+        const sound = new THREE.Audio(this.listener);
+        sound.setBuffer(soundData.buffer);
+        sound.setVolume(soundData.options.volume || 0.8);
 
         // Set the playback range
         sound.offset = sprite.start;

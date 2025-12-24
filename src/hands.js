@@ -50,9 +50,8 @@ export class Hands {
         this.coffeeCup.rotation.y = Math.PI + Math.PI / 6; // 210° yaw (30° CCW from 180°)
 
         // Load cigarette - add to scene (world space)
-        // Using fallback for now to debug visibility issue
         this.cigarette = createFallbackCigarette();
-        this.cigarette.scale.setScalar(1);
+        this.cigarette.scale.setScalar(0.8);
         this.cigarette.name = 'cigarette';
         this.scene.add(this.cigarette);
         this.cigarette.position.copy(this.cigaretteTablePosition);
@@ -195,13 +194,32 @@ export class Hands {
 
     /**
      * Burn the cigarette (reduce its length)
+     * Shrinks paper and moves tip, but filter stays the same
      * @param amount - how much to burn (0.1 = 10% of original length)
      */
     burnCigarette(amount = 0.1) {
         this.cigaretteBurnLevel = Math.max(0.2, this.cigaretteBurnLevel - amount);
         if (this.cigarette) {
-            // Scale X (length) based on burn level, keep Y and Z the same
-            this.cigarette.scale.x = this.cigaretteOriginalScale * this.cigaretteBurnLevel;
+            const paper = this.cigarette.getObjectByName('paper');
+            const tip = this.cigarette.getObjectByName('tip');
+
+            if (paper && tip) {
+                // Cylinder length is along Y axis (before rotation), so scale Y only
+                // Keep X and Z at 1 to preserve width/radius
+                paper.scale.set(1, this.cigaretteBurnLevel, 1);
+
+                // Original paper length and positions
+                const originalLength = this.cigarette.userData.originalPaperLength || 0.06;
+                const newLength = originalLength * this.cigaretteBurnLevel;
+
+                // Move paper toward filter as it shrinks (paper center moves left)
+                const shrinkAmount = (originalLength - newLength) / 2;
+                paper.position.x = -shrinkAmount;
+
+                // Move tip to stay at end of shortened paper
+                const originalTipX = this.cigarette.userData.originalTipX || 0.034;
+                tip.position.x = originalTipX - (originalLength - newLength);
+            }
         }
     }
 
@@ -210,5 +228,48 @@ export class Hands {
      */
     getCigaretteBurnLevel() {
         return this.cigaretteBurnLevel;
+    }
+
+    /**
+     * Set cigarette tip glow intensity (for smoking effect)
+     * @param intensity - 0 to 1 (0 = dim, 1 = bright)
+     */
+    setTipGlow(intensity) {
+        if (!this.cigarette) return;
+        const tip = this.cigarette.getObjectByName('tip');
+        if (tip && tip.material) {
+            // Lerp emissive intensity between 1.5 (idle) and 10.0 (smoking)
+            tip.material.emissiveIntensity = 1.5 + intensity * 8.5;
+
+            // Grow tip depth when smoking
+            // Base height is 0.001, scale up to 100x (0.1) when fully smoking
+            const depthScale = 1 + intensity * 99;
+            tip.scale.x = depthScale;
+
+            // Calculate position: tip grows inward from paper end
+            // Base tip height is 0.001, half of scaled height needs to offset inward
+            const baseHeight = 0.001;
+            const scaledHeight = baseHeight * depthScale;
+            const growthOffset = (scaledHeight - baseHeight) / 2;
+
+            // Get burn-based position from paper end
+            const originalLength = this.cigarette.userData.originalPaperLength || 0.06;
+            const paperEnd = 0.03 - (originalLength - originalLength * this.cigaretteBurnLevel);
+
+            // Position tip at paper end, offset inward by half the growth
+            tip.position.x = paperEnd - growthOffset;
+        }
+    }
+
+    /**
+     * Get current tip glow intensity
+     */
+    getTipGlow() {
+        if (!this.cigarette) return 0;
+        const tip = this.cigarette.getObjectByName('tip');
+        if (tip && tip.material) {
+            return (tip.material.emissiveIntensity - 1.5) / 8.5;
+        }
+        return 0;
     }
 }

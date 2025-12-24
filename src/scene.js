@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
 
 export function createScene() {
     const scene = new THREE.Scene();
@@ -118,4 +119,142 @@ export function handleResize(camera, renderer) {
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
+}
+
+/**
+ * Create a sun with classic lens flare effect
+ * @param {THREE.Scene} scene
+ * @returns {THREE.PointLight} The sun light
+ */
+export function createSunWithLensflare(scene) {
+    // Create sun as a point light
+    const sunLight = new THREE.PointLight(0xffffee, 3, 0, 0);
+    sunLight.position.set(50, 80, -100); // High in the sky, slightly behind/left
+
+    // Create lens flare textures procedurally
+    const textureLoader = new THREE.TextureLoader();
+
+    // Create procedural flare textures
+    const flareTexture = createFlareTexture(256, 0xffffff);
+    const flareHexTexture = createHexFlareTexture(128, 0xffffaa);
+    const flareRingTexture = createRingFlareTexture(128, 0xffaa44);
+
+    // Create lensflare with multiple elements
+    const lensflare = new Lensflare();
+
+    // Main sun glow
+    lensflare.addElement(new LensflareElement(flareTexture, 700, 0, new THREE.Color(0xffffee)));
+
+    // Secondary flare elements (hexagonal reflections)
+    lensflare.addElement(new LensflareElement(flareHexTexture, 60, 0.2, new THREE.Color(0xffeeaa)));
+    lensflare.addElement(new LensflareElement(flareHexTexture, 80, 0.3, new THREE.Color(0xffddaa)));
+    lensflare.addElement(new LensflareElement(flareRingTexture, 120, 0.4, new THREE.Color(0xffaa66)));
+    lensflare.addElement(new LensflareElement(flareHexTexture, 40, 0.5, new THREE.Color(0xffcc88)));
+    lensflare.addElement(new LensflareElement(flareRingTexture, 90, 0.6, new THREE.Color(0xff8844)));
+    lensflare.addElement(new LensflareElement(flareHexTexture, 50, 0.7, new THREE.Color(0xffbb77)));
+    lensflare.addElement(new LensflareElement(flareTexture, 200, 0.9, new THREE.Color(0xffaa44)));
+    lensflare.addElement(new LensflareElement(flareHexTexture, 30, 1.0, new THREE.Color(0xffcc66)));
+
+    sunLight.add(lensflare);
+    scene.add(sunLight);
+
+    console.log('Sun with lens flare created');
+    return sunLight;
+}
+
+/**
+ * Create a circular gradient flare texture
+ */
+function createFlareTexture(size, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const gradient = ctx.createRadialGradient(
+        size / 2, size / 2, 0,
+        size / 2, size / 2, size / 2
+    );
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.8)');
+    gradient.addColorStop(0.4, 'rgba(255, 200, 100, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 150, 50, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}
+
+/**
+ * Create a hexagonal flare texture (classic lens artifact)
+ */
+function createHexFlareTexture(size, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+    ctx.fillRect(0, 0, size, size);
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const radius = size * 0.4;
+
+    // Draw hexagon
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI * 2) / 6 - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+
+    // Gradient fill
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+    gradient.addColorStop(0, 'rgba(255, 255, 200, 0.6)');
+    gradient.addColorStop(0.5, 'rgba(255, 200, 100, 0.3)');
+    gradient.addColorStop(1, 'rgba(255, 150, 50, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}
+
+/**
+ * Create a ring flare texture
+ */
+function createRingFlareTexture(size, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const outerRadius = size * 0.45;
+    const innerRadius = size * 0.3;
+
+    // Outer gradient
+    const gradient = ctx.createRadialGradient(
+        centerX, centerY, innerRadius,
+        centerX, centerY, outerRadius
+    );
+    gradient.addColorStop(0, 'rgba(255, 200, 100, 0)');
+    gradient.addColorStop(0.3, 'rgba(255, 180, 80, 0.4)');
+    gradient.addColorStop(0.7, 'rgba(255, 150, 50, 0.3)');
+    gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
 }

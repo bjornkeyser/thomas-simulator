@@ -6,7 +6,8 @@ import {
     createLighting,
     createFloor,
     handleResize,
-    loadPanoramaBackground
+    loadPanoramaBackground,
+    createSunWithLensflare
 } from './scene.js';
 import { loadModelWithFallback, createFallbackTable } from './loader.js';
 import { Hands } from './hands.js';
@@ -89,6 +90,9 @@ class CafeSimulator {
         // Setup lighting
         createLighting(this.scene);
 
+        // Add sun with lens flare
+        this.sun = createSunWithLensflare(this.scene);
+
         // Load panorama background (interior Bomboca photo sphere)
         loadPanoramaBackground(this.scene, 'panorama_interior.jpg').catch(() => {
             console.log('No panorama found, using default background');
@@ -118,8 +122,16 @@ class CafeSimulator {
         // Create physics world first (moved before liquid)
         this.physics = new PhysicsWorld();
 
-        // Create liquid simulation for coffee cup (pass physics world for droplets)
-        this.liquid = new LiquidSimulation(this.scene, this.hands.getCoffeeCup(), this.physics.world);
+        // Track multiple liquid simulations (one per cup)
+        this.liquids = new Map(); // Map<cup, LiquidSimulation>
+
+        // Create liquid simulation for initial coffee cup
+        const initialCup = this.hands.getCoffeeCup();
+        const initialLiquid = new LiquidSimulation(this.scene, initialCup, this.physics.world);
+        this.liquids.set(initialCup, initialLiquid);
+
+        // Keep reference to "active" liquid for UI meter (most recent unbroken cup)
+        this.activeLiquid = initialLiquid;
 
         // Create animation controller
         this.animation = new AnimationController(this.hands, this.particles);
@@ -158,18 +170,23 @@ class CafeSimulator {
                 // Fracture the cup
                 this.fracture.fracture(mesh, body, impactPoint, force * 2, 10);
 
-                // Spill all liquid at impact point
-                if (this.liquid) {
-                    this.liquid.spillAll(impactPoint);
+                // Spill liquid for this specific cup
+                const liquid = this.liquids.get(mesh);
+                if (liquid) {
+                    liquid.spillAll(impactPoint);
+                    this.liquids.delete(mesh);
                 }
 
-                        // Hide coffee meter
-                if (this.coffeeMeter) {
+                // Disable steam if this was the active cup
+                if (mesh === this.hands.getCoffeeCup() && this.particles) {
+                    this.particles.setSteamEnabled(false);
+                }
+
+                // Hide coffee meter if no cups left
+                if (this.liquids.size === 0 && this.coffeeMeter) {
                     this.coffeeMeter.style.display = 'none';
+                    this.cupBroken = true;
                 }
-
-                // Mark cup as broken so meter stays hidden
-                this.cupBroken = true;
             });
         }
 
@@ -356,6 +373,11 @@ class CafeSimulator {
                     debugEl.textContent = `🚬 SMOKING! ☕${this.drinkScore.toFixed(1)} 🚬${this.smokeScore.toFixed(1)} 🔥${(this.hands.getCigaretteBurnLevel() * 100).toFixed(0)}%`;
                 }
 
+                // Keep tip glowing while cigarette is at mouth
+                if (this.physics.isNearMouth && isCig) {
+                    this.hands.setTipGlow(1);
+                }
+
                 // Reset action if moved away from mouth
                 if (!this.physics.isNearMouth) {
                     actionTriggered = false;
@@ -461,20 +483,33 @@ class CafeSimulator {
 
             this.fracture.fracture(mesh, body, impactPoint, force * 2, 10);
 
-            if (this.liquid) this.liquid.spillAll(impactPoint);
+            // Spill liquid for this specific cup
+            const liquid = this.liquids.get(mesh);
+            if (liquid) {
+                liquid.spillAll(impactPoint);
+                this.liquids.delete(mesh);
+            }
 
-            // Hide coffee meter and mark as broken
-            this.cupBroken = true;
-            if (this.coffeeMeter) this.coffeeMeter.style.display = 'none';
+            // Disable steam if this was the active cup
+            if (mesh === this.hands.getCoffeeCup() && this.particles) {
+                this.particles.setSteamEnabled(false);
+            }
+
+            // Hide coffee meter if no cups left
+            if (this.liquids.size === 0 && this.coffeeMeter) {
+                this.coffeeMeter.style.display = 'none';
+                this.cupBroken = true;
+            }
         });
 
-        // Reset liquid simulation
-        if (this.liquid) {
-            this.liquid.cup = cup;
-            this.liquid.liquidLevel = this.liquid.maxLiquidLevel;
-            this.liquid.initialized = false;
-            // Re-add liquid mesh to new cup
-            cup.add(this.liquid.liquidMesh);
+        // Create new liquid simulation for this cup
+        const newLiquid = new LiquidSimulation(this.scene, cup, this.physics.world);
+        this.liquids.set(cup, newLiquid);
+        this.activeLiquid = newLiquid; // This is now the active cup for UI
+
+        // Re-enable steam for new cup
+        if (this.particles) {
+            this.particles.setSteamEnabled(true);
         }
 
         // Reset broken flag and show coffee meter again
@@ -532,6 +567,20 @@ class CafeSimulator {
         setTimeout(() => {
             this.particles.triggerExhale();
         }, 500);
+
+        // Maybe trigger a cough after smoking
+        // Base 30% chance + 15% per smokeScore point (capped at 90%)
+        const coughChance = Math.min(0.9, 0.3 + this.smokeScore * 0.15);
+        if (Math.random() < coughChance) {
+            // Delay cough to happen after exhale
+            const coughDelay = 800 + Math.random() * 1200; // 0.8-2 seconds after smoking
+            setTimeout(() => {
+                if (this.sounds) {
+                    this.sounds.playCough();
+                    console.log(`Cough! (chance was ${(coughChance * 100).toFixed(0)}%)`);
+                }
+            }, coughDelay);
+        }
     }
 
     updateMeters() {
@@ -567,8 +616,11 @@ class CafeSimulator {
                 this.coffeeMeter.style.display = 'none';
             }
 
-            const coffeeLevel = this.liquid.liquidLevel / this.liquid.maxLiquidLevel;
-            this.coffeeFill.style.width = `${coffeeLevel * 100}%`;
+            // Show liquid level for active cup
+            if (this.activeLiquid) {
+                const coffeeLevel = this.activeLiquid.liquidLevel / this.activeLiquid.maxLiquidLevel;
+                this.coffeeFill.style.width = `${coffeeLevel * 100}%`;
+            }
         } else if (this.cupBroken && this.coffeeMeter) {
             this.coffeeMeter.style.display = 'none';
         }
@@ -625,8 +677,16 @@ class CafeSimulator {
         // Update hands/items positions
         this.hands.update();
 
-        // Update liquid simulation
-        this.liquid.update(deltaTime);
+        // Fade cigarette tip glow back to idle
+        const currentGlow = this.hands.getTipGlow();
+        if (currentGlow > 0) {
+            this.hands.setTipGlow(Math.max(0, currentGlow - deltaTime * 0.8)); // Fade over ~1.25s
+        }
+
+        // Update all liquid simulations
+        for (const liquid of this.liquids.values()) {
+            liquid.update(deltaTime);
+        }
 
         // Update particles
         this.particles.update(deltaTime);

@@ -167,33 +167,39 @@ export function createFallbackCigarette() {
     const paperGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.06, 8);
     const paperMat = new THREE.MeshStandardMaterial({ color: 0xfaf8f5 });
     const paper = new THREE.Mesh(paperGeo, paperMat);
+    paper.name = 'paper';
     paper.rotation.z = Math.PI / 2;
     paper.castShadow = true;
     group.add(paper);
 
-    // Filter
+    // Filter (stays same size when burning)
     const filterGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.015, 8);
     const filterMat = new THREE.MeshStandardMaterial({ color: 0xd4a574 });
     const filter = new THREE.Mesh(filterGeo, filterMat);
+    filter.name = 'filter';
     filter.rotation.z = Math.PI / 2;
     filter.position.x = -0.0375;
     filter.castShadow = true;
     group.add(filter);
 
-    // Burning tip
-    const tipGeo = new THREE.CylinderGeometry(0.004, 0.003, 0.008, 8);
+    // Burning tip - starts as thin disk, grows in depth when smoking
+    // Base height is 0.001, will scale up to 0.01 (10x) when smoking
+    const tipGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 0.001, 12);
     const tipMat = new THREE.MeshStandardMaterial({
         color: 0xff4500,
-        emissive: 0xff2200,
-        emissiveIntensity: 0.5
+        emissive: 0xff4400,
+        emissiveIntensity: 1.5
     });
     const tip = new THREE.Mesh(tipGeo, tipMat);
+    tip.name = 'tip';
     tip.rotation.z = Math.PI / 2;
-    tip.position.x = 0.034;
+    // Position flush with paper end
+    tip.position.x = 0.03;
     group.add(tip);
 
-    // Store tip reference for particles
-    group.userData.tipPosition = tip.position.clone();
+    // Store original positions for burn calculation
+    group.userData.originalPaperLength = 0.06;
+    group.userData.originalTipX = 0.03;
 
     return group;
 }
