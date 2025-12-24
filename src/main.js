@@ -41,6 +41,34 @@ class CafeSimulator {
         // Mouse position for continuous grab updates
         this.lastMouseX = 0;
         this.lastMouseY = 0;
+
+        // Loading progress
+        this.loadingScreen = document.getElementById('loading-screen');
+        this.loadingFill = document.querySelector('.loading-fill');
+        this.loadingText = document.querySelector('.loading-text');
+        this.loadingProgress = 0;
+        this.loadingSteps = 7; // Total loading steps
+    }
+
+    updateLoading(step, text) {
+        this.loadingProgress = step;
+        const percent = Math.round((step / this.loadingSteps) * 100);
+        if (this.loadingFill) {
+            this.loadingFill.style.width = `${percent}%`;
+        }
+        if (this.loadingText) {
+            this.loadingText.textContent = text;
+        }
+    }
+
+    hideLoading() {
+        if (this.loadingScreen) {
+            this.loadingScreen.classList.add('hidden');
+            // Remove from DOM after transition
+            setTimeout(() => {
+                this.loadingScreen.style.display = 'none';
+            }, 500);
+        }
     }
 
     async init() {
@@ -50,6 +78,8 @@ class CafeSimulator {
             console.error('Canvas not found!');
             return;
         }
+
+        this.updateLoading(1, 'Setting up scene...');
 
         // Create core Three.js components
         this.scene = createScene();
@@ -66,8 +96,12 @@ class CafeSimulator {
             createFloor(this.scene);
         });
 
+        this.updateLoading(2, 'Loading environment...');
+
         // Load environment (table)
         await this.loadEnvironment();
+
+        this.updateLoading(3, 'Loading items...');
 
         // Setup items (cup and cigarette on table, in world space)
         this.hands = new Hands(this.camera, this.scene);
@@ -75,6 +109,8 @@ class CafeSimulator {
 
         // Add camera to scene for proper transforms
         this.scene.add(this.camera);
+
+        this.updateLoading(4, 'Setting up physics...');
 
         // Create particle system
         this.particles = new SmokeParticleSystem(this.scene, this.hands);
@@ -91,9 +127,13 @@ class CafeSimulator {
         // Setup controls (keyboard + mouse look)
         this.controls = new Controls(this.animation, this.camera);
 
+        this.updateLoading(5, 'Loading sounds...');
+
         // Setup sound system
         this.sounds = new SoundManager(this.camera);
         await this.sounds.init();
+
+        this.updateLoading(6, 'Setting up interactions...');
 
         // Setup physics (world already created above)
         this.setupPhysics();
@@ -148,12 +188,17 @@ class CafeSimulator {
         // Setup action buttons
         this.setupActionButtons();
 
+        this.updateLoading(7, 'Ready!');
+
         this.isInitialized = true;
         console.log('Cafe Simulator initialized!');
         console.log('Drag objects down toward mouth to drink/smoke!');
 
         // Ambient sound will auto-start when audio context is resumed on first user interaction
         // (handled by SoundManager.setupContextResume)
+
+        // Hide loading screen
+        setTimeout(() => this.hideLoading(), 300);
 
         // Start render loop
         this.animate();
@@ -281,9 +326,9 @@ class CafeSimulator {
                 // Smoothly tilt cup when near mouth and increment drink score
                 if (this.physics.isNearMouth && isCup) {
                     this.hands.cupTilt = Math.min(0.6, this.hands.cupTilt + 0.04);
-                    // Increment drink score while drinking (slowly)
+                    // Increment drink score while drinking (very slowly)
                     if (this.hands.cupTilt > 0.3) {
-                        this.drinkScore += 0.01;
+                        this.drinkScore += 0.002;
                         // Coffee counteracts smoking lag (antagonist)
                         this.smokeScore = Math.max(0, this.smokeScore - 0.02);
                         // Play sip sound once per drink
@@ -442,14 +487,10 @@ class CafeSimulator {
     }
 
     async spawnNewCigarette() {
-        const { loadModelWithFallback, createFallbackCigarette } = await import('./loader.js');
+        const { createFallbackCigarette } = await import('./loader.js');
 
-        // Create new cigarette (keep old ones around)
-        const cigarette = await loadModelWithFallback(
-            'models/cigarette_-_daily3d.glb',
-            createFallbackCigarette,
-            { scale: 0.8 }
-        );
+        // Create new cigarette using fallback (GLB model has issues)
+        const cigarette = createFallbackCigarette();
         cigarette.name = 'cigarette';
         this.scene.add(cigarette);
 

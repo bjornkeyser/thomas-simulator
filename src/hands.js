@@ -50,11 +50,9 @@ export class Hands {
         this.coffeeCup.rotation.y = Math.PI + Math.PI / 6; // 210° yaw (30° CCW from 180°)
 
         // Load cigarette - add to scene (world space)
-        this.cigarette = await loadModelWithFallback(
-            'models/cigarette_-_daily3d.glb',
-            createFallbackCigarette,
-            { scale: 0.8 }
-        );
+        // Using fallback for now to debug visibility issue
+        this.cigarette = createFallbackCigarette();
+        this.cigarette.scale.setScalar(1);
         this.cigarette.name = 'cigarette';
         this.scene.add(this.cigarette);
         this.cigarette.position.copy(this.cigaretteTablePosition);

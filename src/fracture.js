@@ -56,8 +56,18 @@ export class FractureSystem {
                 }
             });
         }
-        // Fallback to a default material if none found
-        const baseColor = originalMaterial?.color?.getHex() || 0x8B4513;
+
+        // Extract color from material - try texture first, then base color
+        let fragmentColor = new THREE.Color(0x8B4513); // Default brown
+        if (originalMaterial) {
+            // If material has a map (texture), sample its average color
+            const map = originalMaterial.map;
+            if (map && map.image) {
+                fragmentColor = this.getAverageColorFromTexture(map);
+            } else if (originalMaterial.color) {
+                fragmentColor = originalMaterial.color.clone();
+            }
+        }
 
         // Create fragment meshes from clusters
         for (let i = 0; i < seeds.length; i++) {
@@ -77,11 +87,17 @@ export class FractureSystem {
                     continue;
                 }
 
-                // Create fragment mesh with ceramic-like material
+                // Create material with extracted color (slight variation per fragment)
+                const colorVariation = 0.05;
+                const variedColor = fragmentColor.clone();
+                variedColor.r = Math.max(0, Math.min(1, variedColor.r + (Math.random() - 0.5) * colorVariation));
+                variedColor.g = Math.max(0, Math.min(1, variedColor.g + (Math.random() - 0.5) * colorVariation));
+                variedColor.b = Math.max(0, Math.min(1, variedColor.b + (Math.random() - 0.5) * colorVariation));
+
                 const material = new THREE.MeshStandardMaterial({
-                    color: baseColor,
-                    roughness: 0.7,
-                    metalness: 0.1,
+                    color: variedColor,
+                    roughness: originalMaterial?.roughness ?? 0.7,
+                    metalness: originalMaterial?.metalness ?? 0.1,
                     side: THREE.DoubleSide
                 });
 
@@ -161,6 +177,45 @@ export class FractureSystem {
         console.log(`Fractured into ${this.fragments.length} pieces`);
 
         return this.fragments;
+    }
+
+    /**
+     * Extract average color from a texture
+     */
+    getAverageColorFromTexture(texture) {
+        const image = texture.image;
+        if (!image) return new THREE.Color(0x8B4513);
+
+        // Create canvas to sample the texture
+        const canvas = document.createElement('canvas');
+        const size = 32; // Sample at low res for speed
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        try {
+            ctx.drawImage(image, 0, 0, size, size);
+            const imageData = ctx.getImageData(0, 0, size, size);
+            const data = imageData.data;
+
+            let r = 0, g = 0, b = 0, count = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                r += data[i];
+                g += data[i + 1];
+                b += data[i + 2];
+                count++;
+            }
+
+            r = (r / count) / 255;
+            g = (g / count) / 255;
+            b = (b / count) / 255;
+
+            console.log('Fragment color from texture:', { r: r.toFixed(2), g: g.toFixed(2), b: b.toFixed(2) });
+            return new THREE.Color(r, g, b);
+        } catch (e) {
+            console.warn('Could not sample texture:', e);
+            return new THREE.Color(0x8B4513);
+        }
     }
 
     /**

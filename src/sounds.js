@@ -114,11 +114,11 @@ export class SoundManager {
                 }),
                 this.loadSound('cupTap', 'sounds/413635__krnfa__foley-cup-on-the-table.wav', { volume: 0.5 }),
                 this.loadSound('ambient', 'sounds/482990__priesjensen__people-talking-at-cafe-ambience.wav', {
-                    volume: 1.0,
+                    volume: 2.0,
                     loop: true
                 }),
                 this.loadSound('ambient2', 'sounds/661805__klankbeeld__village-street-traffic-1158-220820_0507.wav', {
-                    volume: 1.0,
+                    volume: 1.5,
                     loop: true
                 }),
                 this.loadSound('break', 'sounds/735851__geoff-bremner-audio__smashing-breaking-porcelain-mug-2.wav', {
