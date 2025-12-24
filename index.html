@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cafe Simulator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    <div id="ui">
+        <div id="controls-hint">
+            <span>Drag cup/cigarette to mouth to drink/smoke</span>
+        </div>
+        <div id="debug" style="position:fixed; top:50px; left:50%; transform:translateX(-50%); font-size:32px; color:yellow; text-shadow:2px 2px black; font-family:monospace;"></div>
+
+    </div>
+
+    <!-- Coffee meter (follows cup) - outside #ui for absolute positioning -->
+    <div id="coffee-meter" class="object-meter">
+        <div class="meter-icon">☕</div>
+        <div class="meter-bar">
+            <div class="meter-fill coffee-fill"></div>
+        </div>
+    </div>
+
+    <!-- Cigarette meter (follows cigarette) - outside #ui for absolute positioning -->
+    <div id="cigarette-meter" class="object-meter">
+        <div class="meter-icon">🚬</div>
+        <div class="meter-bar">
+            <div class="meter-fill cigarette-fill"></div>
+        </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div id="action-buttons">
+        <button id="new-coffee-btn" class="action-btn">☕ New Coffee</button>
+        <button id="new-cigarette-btn" class="action-btn">🚬 Light Cigarette</button>
+    </div>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+        }
+    }
+    </script>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
