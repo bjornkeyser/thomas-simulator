@@ -51,7 +51,7 @@ export class Hands {
 
         // Load cigarette - add to scene (world space)
         this.cigarette = await loadModelWithFallback(
-            'models/cigarette.glb',
+            'models/cigarette_-_daily3d.glb',
             createFallbackCigarette,
             { scale: 0.8 }
         );

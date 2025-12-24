@@ -446,7 +446,7 @@ class CafeSimulator {
 
         // Create new cigarette (keep old ones around)
         const cigarette = await loadModelWithFallback(
-            'models/cigarette.glb',
+            'models/cigarette_-_daily3d.glb',
             createFallbackCigarette,
             { scale: 0.8 }
         );
