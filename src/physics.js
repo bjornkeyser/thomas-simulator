@@ -78,13 +78,14 @@ export class PhysicsWorld {
                     body.velocity.vsub(otherBody.velocity, relativeVelocity);
                     const impactSpeed = relativeVelocity.length();
 
-                    // Break on any solid collision (ground, table, or fragments) with enough force
-                    const isGroundOrTable = otherBody.mass === 0;
+                    // Only break on ground collision (y < 0.3) or fragment collision
+                    // Table is at y ~ 0.75, so cups landing on table shouldn't break
+                    const isGround = otherBody.mass === 0 && otherBody.position.y < 0.3;
                     const isFragment = otherBody.mass > 0 && otherBody.mass < 0.1; // Fragments have mass 0.05
 
-                    if (isGroundOrTable || isFragment) {
+                    if (isGround || isFragment) {
                         console.log('Collision! Speed:', impactSpeed.toFixed(2), 'threshold:', config.threshold,
-                            isFragment ? '(fragment)' : '(static)');
+                            isFragment ? '(fragment)' : '(ground)');
 
                         if (impactSpeed > config.threshold) {
                             const impactPoint = new THREE.Vector3(

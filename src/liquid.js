@@ -272,11 +272,49 @@ export class LiquidSimulation {
         // Stain system
         this.stains = [];
         this.maxStains = 300;        // Allow many stains for big spills
-        this.stainGeometry = new THREE.CircleGeometry(0.008, 8);
-        this.stainMaterial = new THREE.MeshBasicMaterial({
-            color: 0x5c4a1f, // Coffee stain color
+
+        // Create coffee ring shader material (drying effect over time)
+        this.stainMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: new THREE.Color(0x8b6914) }, // Lighter coffee brown
+                uOpacity: { value: 0.4 },
+                uDryness: { value: 0.0 } // 0 = fresh, 1 = fully dried with ring
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 uColor;
+                uniform float uOpacity;
+                uniform float uDryness;
+                varying vec2 vUv;
+
+                void main() {
+                    vec2 centered = vUv - 0.5;
+                    float dist = length(centered) * 2.0;
+
+                    // Edge fades
+                    float innerFade = smoothstep(0.0, 0.4, dist);
+                    float outerFade = 1.0 - smoothstep(0.85, 1.0, dist);
+                    float ringDark = smoothstep(0.5, 0.85, dist);
+
+                    // Coffee ring develops as stain dries
+                    // Fresh: uniform color, Dry: dark edges, light center
+                    float ringEffect = ringDark * uDryness;
+                    vec3 finalColor = uColor * (1.0 - ringEffect * 0.4);
+
+                    // Center becomes more transparent as it dries
+                    float centerFade = mix(1.0, 0.3 + ringDark * 0.7, uDryness);
+                    float alpha = uOpacity * innerFade * outerFade * centerFade;
+
+                    gl_FragColor = vec4(finalColor, alpha);
+                }
+            `,
             transparent: true,
-            opacity: 0.6,
             depthWrite: false
         });
         this.stainMaterial.polygonOffset = true;
@@ -752,27 +790,131 @@ export class LiquidSimulation {
         img.src = texturePath;
     }
 
+    /**
+     * Create organic ellipse geometry with noise-distorted edges
+     */
+    createOrganicEllipseGeometry(radiusX, radiusY, segments = 32) {
+        const shape = new THREE.Shape();
+
+        // Random phase offsets for variety
+        const phase1 = Math.random() * Math.PI * 2;
+        const phase2 = Math.random() * Math.PI * 2;
+        const phase3 = Math.random() * Math.PI * 2;
+
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+
+            // Low frequency, high amplitude for smooth organic blobs
+            const noise1 = Math.sin(angle * 1 + phase1) * 0.35;  // 1 lobe
+            const noise2 = Math.sin(angle * 2 + phase2) * 0.25;  // 2 lobes
+            const noise3 = Math.sin(angle * 3 + phase3) * 0.15;  // 3 lobes
+            const noiseScale = 1 + noise1 + noise2 + noise3;
+
+            const px = Math.cos(angle) * radiusX * noiseScale;
+            const py = Math.sin(angle) * radiusY * noiseScale;
+
+            if (i === 0) {
+                shape.moveTo(px, py);
+            } else {
+                shape.lineTo(px, py);
+            }
+        }
+
+        const geometry = new THREE.ShapeGeometry(shape);
+
+        // Generate UVs based on position (for shader)
+        const pos = geometry.attributes.position;
+        const uvs = new Float32Array(pos.count * 2);
+        for (let i = 0; i < pos.count; i++) {
+            // Map position to 0-1 UV range
+            uvs[i * 2] = (pos.getX(i) / radiusX + 1) * 0.5;
+            uvs[i * 2 + 1] = (pos.getY(i) / radiusY + 1) * 0.5;
+        }
+        geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+        return geometry;
+    }
+
     createStain(x, y, z) {
+        // Skip stains on top of the ashtray
+        const ashtrayX = 0.26, ashtrayZ = -0.25, ashtrayRadius = 0.08;
+        const distToAshtray = Math.sqrt((x - ashtrayX) ** 2 + (z - ashtrayZ) ** 2);
+        if (y > 0.5 && distToAshtray < ashtrayRadius) {
+            return; // Don't stain on ashtray
+        }
+
         // Remove oldest stain if at max
         if (this.stains.length >= this.maxStains) {
             const oldest = this.stains.shift();
             this.scene.remove(oldest.mesh);
+            oldest.mesh.geometry.dispose();
             oldest.mesh.material.dispose();
         }
 
-        // Create stain mesh with its own material
+        // Snap stain Y to nearest surface (table at ~0.77, ground at 0)
+        const tableHeight = 0.77;
+        const groundHeight = 0.001;
+        let stainY;
+        if (y > 0.5) {
+            stainY = tableHeight;
+        } else {
+            stainY = groundHeight;
+        }
+
+        // Random ellipse dimensions with large variation
+        // Weighted random: mostly small, occasionally big splashes
+        const sizeRoll = Math.random();
+        let baseSize;
+        if (sizeRoll < 0.6) {
+            baseSize = 0.005 + Math.random() * 0.005; // Small (60%)
+        } else if (sizeRoll < 0.85) {
+            baseSize = 0.01 + Math.random() * 0.008; // Medium (25%)
+        } else {
+            baseSize = 0.015 + Math.random() * 0.015; // Large - up to 3x (15%)
+        }
+        const aspectRatio = 0.5 + Math.random() * 1.0; // 0.5 to 1.5 for more elongation
+        const radiusX = baseSize;
+        const radiusY = baseSize * aspectRatio;
+
+        // Create organic ellipse geometry
+        const geometry = this.createOrganicEllipseGeometry(radiusX, radiusY);
+
+        // Create material with color variation (coffee browns)
+        const baseColor = new THREE.Color(0x8b6914);
+        const colorVariation = (Math.random() - 0.5) * 0.1;
+        const stainColor = new THREE.Color(
+            Math.max(0.2, baseColor.r + colorVariation),
+            Math.max(0.1, baseColor.g + colorVariation * 0.8),
+            Math.max(0, baseColor.b + colorVariation * 0.5)
+        );
+
         const stainMat = this.stainMaterial.clone();
-        stainMat.opacity = 0.7; // Stains are permanent, full opacity
-        const stain = new THREE.Mesh(this.stainGeometry, stainMat);
-        stain.position.set(x, y, z);
-        stain.rotation.x = -Math.PI / 2; // Flat on table
-        stain.scale.setScalar(0.8 + Math.random() * 0.4); // Random size variation
+        stainMat.uniforms = {
+            uColor: { value: stainColor },
+            uOpacity: { value: 0.35 + Math.random() * 0.15 },
+            uDryness: { value: 0.0 } // Starts fresh, dries over time
+        };
+
+        const stain = new THREE.Mesh(geometry, stainMat);
+        stain.position.set(x, stainY, z);
+        stain.rotation.x = -Math.PI / 2; // Flat on surface
+        stain.rotation.z = Math.random() * Math.PI * 2; // Random rotation
+        stain.scale.setScalar(0.8 + Math.random() * 0.5);
         this.scene.add(stain);
-        this.stains.push({ mesh: stain });
+        this.stains.push({ mesh: stain, age: 0 }); // Track age for drying effect
     }
 
     updateStains(deltaTime) {
-        // Stains are now permanent - no fading needed
+        const dryTime = 5.0; // Seconds to fully dry and form coffee ring
+        for (const stain of this.stains) {
+            if (stain.age < dryTime) {
+                stain.age += deltaTime;
+                const dryness = Math.min(1.0, stain.age / dryTime);
+                if (stain.mesh.material.uniforms && stain.mesh.material.uniforms.uDryness) {
+                    stain.mesh.material.uniforms.uDryness.value = dryness;
+                }
+            }
+        }
     }
 
     updateLiquidMesh(cupWorldPos, cupTilt) {
@@ -903,13 +1045,13 @@ export class LiquidSimulation {
         this.dropletInstancedMesh.geometry.dispose();
         this.dropletInstancedMesh.material.dispose();
 
-        // Clean up stains
+        // Clean up stains (each has its own geometry now)
         for (const s of this.stains) {
             this.scene.remove(s.mesh);
+            s.mesh.geometry.dispose();
             s.mesh.material.dispose();
         }
         this.stains = [];
-        this.stainGeometry.dispose();
         this.stainMaterial.dispose();
     }
 }

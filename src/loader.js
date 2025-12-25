@@ -182,9 +182,8 @@ export function createFallbackCigarette() {
     filter.castShadow = true;
     group.add(filter);
 
-    // Burning tip - starts as thin disk, grows in depth when smoking
-    // Base height is 0.001, will scale up to 0.01 (10x) when smoking
-    const tipGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 0.001, 12);
+    // Burning tip - flat disk at end of cigarette
+    const tipGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 0.002, 12);
     const tipMat = new THREE.MeshStandardMaterial({
         color: 0xff4500,
         emissive: 0xff4400,

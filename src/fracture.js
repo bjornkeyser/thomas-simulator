@@ -7,7 +7,7 @@ export class FractureSystem {
         this.scene = scene;
         this.physicsWorld = physicsWorld;
         this.fragments = [];
-        this.fragmentBodies = [];
+        this.fragmentBodies = []; // { mesh, body, createdAt, frozen }
     }
 
     /**
@@ -162,7 +162,7 @@ export class FractureSystem {
                 );
 
                 this.physicsWorld.addBody(fragBody);
-                this.fragmentBodies.push({ mesh: fragment, body: fragBody });
+                this.fragmentBodies.push({ mesh: fragment, body: fragBody, createdAt: performance.now(), frozen: false });
             } catch (e) {
                 console.warn('Failed to create fragment geometry:', e);
             }
@@ -333,9 +333,25 @@ export class FractureSystem {
      * Update fragment physics
      */
     update() {
-        for (const { mesh, body } of this.fragmentBodies) {
-            mesh.position.copy(body.position);
-            mesh.quaternion.copy(body.quaternion);
+        const now = performance.now();
+        const freezeDelay = 1000; // Freeze fragments after 1 second
+
+        for (const frag of this.fragmentBodies) {
+            if (!frag.frozen) {
+                // Sync mesh to physics
+                frag.mesh.position.copy(frag.body.position);
+                frag.mesh.quaternion.copy(frag.body.quaternion);
+
+                // Freeze after delay to save performance
+                if (now - frag.createdAt > freezeDelay) {
+                    frag.body.mass = 0;
+                    frag.body.updateMassProperties();
+                    frag.body.velocity.setZero();
+                    frag.body.angularVelocity.setZero();
+                    frag.body.sleep();
+                    frag.frozen = true;
+                }
+            }
         }
     }
 

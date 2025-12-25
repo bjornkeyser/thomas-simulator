@@ -144,7 +144,7 @@ export class SoundManager {
                 }),
                 this.loadSound('cupTap', 'sounds/413635__krnfa__foley-cup-on-the-table.wav', { volume: 0.5 }),
                 this.loadSound('ambient', 'sounds/482990__priesjensen__people-talking-at-cafe-ambience.wav', {
-                    volume: 2.0,
+                    volume: 4.0,
                     loop: true
                 }),
                 this.loadSound('ambient2', 'sounds/661805__klankbeeld__village-street-traffic-1158-220820_0507.wav', {

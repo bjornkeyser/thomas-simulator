@@ -373,9 +373,10 @@ class CafeSimulator {
                     debugEl.textContent = `🚬 SMOKING! ☕${this.drinkScore.toFixed(1)} 🚬${this.smokeScore.toFixed(1)} 🔥${(this.hands.getCigaretteBurnLevel() * 100).toFixed(0)}%`;
                 }
 
-                // Keep tip glowing while cigarette is at mouth
+                // Grow tip continuously while cigarette is at mouth - no cap
                 if (this.physics.isNearMouth && isCig) {
-                    this.hands.setTipGlow(1);
+                    this.tipGrowth = (this.tipGrowth || 0) + 0.01; // Half speed growth, no cap
+                    this.hands.setTipGlow(this.tipGrowth);
                 }
 
                 // Reset action if moved away from mouth
@@ -384,6 +385,11 @@ class CafeSimulator {
                     // Stop smoke sound when moving away
                     if (this.sounds) {
                         this.sounds.stopSmoke();
+                    }
+                    // Reset tip to default size instantly
+                    if (isCig) {
+                        this.tipGrowth = 0;
+                        this.hands.setTipGlow(0);
                     }
                     // Smoothly reset cup tilt when moving away
                     if (this.hands.cupTilt > 0) {
@@ -677,11 +683,7 @@ class CafeSimulator {
         // Update hands/items positions
         this.hands.update();
 
-        // Fade cigarette tip glow back to idle
-        const currentGlow = this.hands.getTipGlow();
-        if (currentGlow > 0) {
-            this.hands.setTipGlow(Math.max(0, currentGlow - deltaTime * 0.8)); // Fade over ~1.25s
-        }
+        // Tip glow is now reset instantly when not smoking (no fading needed)
 
         // Update all liquid simulations
         for (const liquid of this.liquids.values()) {

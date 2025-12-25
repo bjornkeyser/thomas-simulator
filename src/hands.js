@@ -217,7 +217,7 @@ export class Hands {
                 paper.position.x = -shrinkAmount;
 
                 // Move tip to stay at end of shortened paper
-                const originalTipX = this.cigarette.userData.originalTipX || 0.034;
+                const originalTipX = this.cigarette.userData.originalTipX || 0.03;
                 tip.position.x = originalTipX - (originalLength - newLength);
             }
         }
@@ -231,33 +231,21 @@ export class Hands {
     }
 
     /**
-     * Set cigarette tip glow intensity (for smoking effect)
-     * @param intensity - 0 to 1 (0 = dim, 1 = bright)
+     * Set cigarette tip size (for smoking effect)
+     * @param intensity - 0 = default size, grows with smoking
      */
     setTipGlow(intensity) {
         if (!this.cigarette) return;
         const tip = this.cigarette.getObjectByName('tip');
-        if (tip && tip.material) {
-            // Lerp emissive intensity between 1.5 (idle) and 10.0 (smoking)
-            tip.material.emissiveIntensity = 1.5 + intensity * 8.5;
+        if (tip) {
+            // Scale tip length - grows significantly with intensity
+            // Cylinder height is Y in local space (before rotation), so scale Y
+            tip.scale.y = 1 + intensity * 20;
 
-            // Grow tip depth when smoking
-            // Base height is 0.001, scale up to 100x (0.1) when fully smoking
-            const depthScale = 1 + intensity * 99;
-            tip.scale.x = depthScale;
-
-            // Calculate position: tip grows inward from paper end
-            // Base tip height is 0.001, half of scaled height needs to offset inward
-            const baseHeight = 0.001;
-            const scaledHeight = baseHeight * depthScale;
-            const growthOffset = (scaledHeight - baseHeight) / 2;
-
-            // Get burn-based position from paper end
-            const originalLength = this.cigarette.userData.originalPaperLength || 0.06;
-            const paperEnd = 0.03 - (originalLength - originalLength * this.cigaretteBurnLevel);
-
-            // Position tip at paper end, offset inward by half the growth
-            tip.position.x = paperEnd - growthOffset;
+            // Make tip glow brighter with intensity
+            if (tip.material) {
+                tip.material.emissiveIntensity = 1.5 + intensity * 10;
+            }
         }
     }
 
